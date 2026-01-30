@@ -1,0 +1,6 @@
+# No external dependencies required for basic version
+# Tkinter comes with Python standard library
+
+# Optional: For future Jami integration
+# pydbus-win
+# jeepney
