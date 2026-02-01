@@ -189,6 +189,31 @@ class P2PClient:
             # Remove dead connection
             del self.peer_connections[peer_address]
             
+    def send_group_message(self, message: str):
+        """Send a message to all connected peers"""
+        if not self.peer_connections:
+            return 0
+            
+        msg_data = {
+            'type': 'group_message',
+            'from': self.username,
+            'text': message,
+            'timestamp': time.time()
+        }
+        
+        encoded_msg = json.dumps(msg_data).encode() + b'\n'
+        count = 0
+        
+        # Iterate copy of values to avoid modification issues
+        for peer_addr, sock in list(self.peer_connections.items()):
+            try:
+                sock.send(encoded_msg)
+                count += 1
+            except Exception as e:
+                print(f"Group send error to {peer_addr}: {e}")
+                
+        return count
+
     def set_message_callback(self, callback: Callable):
         """Set callback for incoming messages"""
         self.message_callback = callback
@@ -257,6 +282,16 @@ class P2PClient:
                     text=msg.get('text'),
                     timestamp=msg.get('timestamp')
                 )
+                        
+        elif msg_type == 'group_message':
+            # Deliver to callback with special type
+            if self.message_callback:
+                self.message_callback(
+                    sender=msg.get('from'),
+                    text=msg.get('text'),
+                    timestamp=msg.get('timestamp'),
+                    msg_type='group_message'
+                )
                 
         elif msg_type == 'video_request':
             # New video call request
@@ -268,6 +303,17 @@ class P2PClient:
                     text="Incoming Video Call... ",
                     timestamp=msg.get('timestamp'),
                     msg_type='video_request',
+                    peer_address=peer_address
+                )
+
+        elif msg_type == 'audio_request':
+            # New audio request
+            if self.message_callback:
+                self.message_callback(
+                    sender=msg.get('from'),
+                    text="Incoming Voice Call...",
+                    timestamp=msg.get('timestamp'),
+                    msg_type='audio_request',
                     peer_address=peer_address
                 )
                 

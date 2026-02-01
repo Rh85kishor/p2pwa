@@ -133,6 +133,10 @@ class ChatGUI:
         ttk.Button(center_frame, text="Connect",
                   command=self.connect_to_peer).pack(pady=20)
                   
+        # Group Chat Button
+        ttk.Button(center_frame, text="👥 Group Chat",
+                  command=self.show_group_chat_screen).pack(pady=5)
+                  
         # Discovery runs in background, but we don't display the list anymore
         # self.client.set_peer_list_callback(None)
 
@@ -236,6 +240,10 @@ class ChatGUI:
         # Video Call Button
         ttk.Button(input_frame, text="📹 Video",
                   command=self.start_video_call).pack(side='right', padx=5)
+                  
+        # Voice Call Button
+        ttk.Button(input_frame, text="📞 Voice",
+                  command=self.start_audio_call).pack(side='right', padx=5)
         
     def send_message(self):
         """Send a message"""
@@ -252,6 +260,17 @@ class ChatGUI:
             
     def on_message_received(self, sender: str, text: str, timestamp: float, msg_type: str = 'message', peer_address: str = None):
         """Callback for incoming messages"""
+        
+        # Handle Group Messages
+        if msg_type == 'group_message':
+             if self.screen == "group_chat":
+                 self.root.after(0, lambda: self.display_message(f"[{sender}]", text))
+             else:
+                 # Optional: Notification for group message
+                 pass
+             return
+
+        # Handle Private Messages
         if self.screen == "chat":
             if msg_type == 'video_request':
                 # Show incoming call alert
@@ -261,6 +280,12 @@ class ChatGUI:
                     self.root.after(0, lambda: self.open_video_window(peer_address))
             else:
                 self.root.after(0, lambda: self.display_message(sender, text))
+                
+            if msg_type == 'audio_request':
+                response = messagebox.askyesno("Incoming Voice Call",
+                                             f"Voice call from {sender}. Accept?")
+                if response:
+                     self.root.after(0, lambda: self.start_audio_session(peer_address))
             
     def display_message(self, sender: str, text: str):
         """Display a message in the chat"""
@@ -278,6 +303,63 @@ class ChatGUI:
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
         
+    def show_group_chat_screen(self):
+        """Show group chat interface"""
+        self.clear_screen()
+        self.screen = "group_chat"
+        self.current_peer = "GROUP_CHAT"
+        
+        # Header
+        header = tk.Frame(self.root, bg='#312e81', height=60)
+        header.pack(fill='x')
+        
+        ttk.Button(header, text="← Back",
+                  command=self.show_connect_screen).pack(side='left', padx=10, pady=10)
+        
+        # Count connected peers
+        peer_count = len(self.client.peer_connections) if self.client else 0
+        
+        tk.Label(header, text=f"👥 Group Chat ({peer_count} Peers)",
+                font=('Arial', 12, 'bold'),
+                bg='#312e81', fg='white').pack(side='left')
+        
+        # Messages area
+        self.messages_text = scrolledtext.ScrolledText(
+            self.root,
+            bg='#1e1b4b',
+            fg='white',
+            font=('Arial', 10),
+            wrap='word'
+        )
+        self.messages_text.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Input area
+        input_frame = tk.Frame(self.root, bg='#312e81')
+        input_frame.pack(fill='x', padx=10, pady=10)
+        
+        self.message_entry = ttk.Entry(input_frame, font=('Arial', 11))
+        self.message_entry.pack(side='left', fill='x', expand=True, padx=5)
+        self.message_entry.bind('<Return>', lambda e: self.send_group_message())
+        self.message_entry.focus()
+        
+        ttk.Button(input_frame, text="Send All",
+                  command=self.send_group_message).pack(side='right', padx=5)
+
+    def send_group_message(self):
+        """Send a message to all peers"""
+        message = self.message_entry.get().strip()
+        if not message:
+            return
+            
+        try:
+            count = self.client.send_group_message(message)
+            self.display_message("You", message) # Show locally
+            self.message_entry.delete(0, 'end')
+            if count == 0:
+                self.display_message("System", "(No peers connected)")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send: {e}")
+
     def start_video_call(self):
         """Start a video call"""
         if not self.client or not self.current_peer:
@@ -342,11 +424,61 @@ class ChatGUI:
                 
             video_win.protocol("WM_DELETE_WINDOW", on_close)
             
+            video_win.protocol("WM_DELETE_WINDOW", on_close)
+            
         except Exception as e:
             messagebox.showerror("Video Error", f"Could not start video: {e}")
 
+    def start_audio_call(self):
+        """Start a voice call"""
+        if not self.client or not self.current_peer:
+            return
+            
+        try:
+            self.client.send_message(self.current_peer, "Starting Voice Call...", msg_type='audio_request')
+            self.start_audio_session(self.current_peer)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start audio: {e}")
+            
+    def start_audio_session(self, peer_address):
+        """Start audio client"""
+        from audio_client import AudioClient
+        
+        try:
+            # Parse IP/Port
+            if '(' in peer_address:
+                address_part = peer_address.split('(')[1].strip(')')
+            else:
+                address_part = peer_address
+            
+            ip, port = address_part.split(':')
+            port = int(port)
+            
+            # Start Audio Client
+            self.audio_client = AudioClient(self.client.port)
+            self.audio_client.start_call(ip, port)
+            
+            # Show small dialog
+            call_win = tk.Toplevel(self.root)
+            call_win.title("Voice Call")
+            call_win.geometry("250x120")
+            
+            tk.Label(call_win, text=f"Call with {ip}...", font=('Arial', 10)).pack(pady=20)
+            
+            def stop_call():
+                self.audio_client.stop_call()
+                call_win.destroy()
+                
+            ttk.Button(call_win, text="End Call", command=stop_call).pack()
+            call_win.protocol("WM_DELETE_WINDOW", stop_call)
+            
+        except Exception as e:
+             messagebox.showerror("Audio Error", f"Could not start audio: {e}")
+
     def on_closing(self):
         """Handle window close"""
+        if hasattr(self, 'audio_client') and self.audio_client:
+            self.audio_client.stop_call()
         if self.client:
             self.client.stop()
         self.root.destroy()
