@@ -48,8 +48,16 @@ class P2PClient:
     def connect_to_peer(self, peer_address: str) -> bool:
         """Connect to a peer using IP:PORT format"""
         try:
-            host, port = peer_address.split(':')
-            port = int(port)
+            # Validate format
+            if ':' not in peer_address:
+                raise ValueError("Peer address must be in format IP:PORT (e.g., 192.168.1.100:5000)")
+            
+            parts = peer_address.split(':')
+            if len(parts) != 2:
+                raise ValueError("Invalid address format. Use IP:PORT")
+            
+            host, port_str = parts
+            port = int(port_str)
             
             # Create connection
             peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -127,12 +127,19 @@ class ChatGUI:
         # Connect section
         tk.Label(content, text="Connect with a friend",
                 font=('Arial', 12),
-                bg='#1e1b4b', fg='white').pack(pady=20)
+                bg='#1e1b4b', fg='white').pack(pady=10)
+        
+        # Instruction label
+        tk.Label(content, text="Enter their Peer ID (format: IP:PORT)",
+                font=('Arial', 9),
+                bg='#1e1b4b', fg='#94a3b8').pack(pady=5)
         
         connect_frame = tk.Frame(content, bg='#1e1b4b')
         connect_frame.pack()
         
         self.peer_entry = ttk.Entry(connect_frame, width=30, font=('Arial', 10))
+        self.peer_entry.insert(0, "192.168.1.100:5000")  # Placeholder
+        self.peer_entry.bind('<FocusIn>', lambda e: self.peer_entry.delete(0, 'end') if self.peer_entry.get() == "192.168.1.100:5000" else None)
         self.peer_entry.pack(side='left', padx=5)
         
         ttk.Button(connect_frame, text="Connect",
